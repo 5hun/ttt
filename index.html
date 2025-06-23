@@ -2,7 +2,7 @@
 <html lang="en">
 
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>Task Time Tracker</title>
     <style>
         body {
@@ -116,7 +116,7 @@
     <div id="timers"></div>
 
     <form id="addForm">
-        <input id="newLabel" type="text" placeholder="Label" required>
+        <input id="newLabel" type="text" placeholder="Label" required />
         <button type="submit">Add</button>
     </form>
 
@@ -129,19 +129,19 @@
             const newLabelInput = document.getElementById('newLabel');
             const resetAllBtn = document.getElementById('resetAll');
 
-            /** Timer objects:
-             *   { id, label, elapsed, running, lastStart }
+            /** Timer objects structure
+             *  { id, label, elapsed, running, lastStart }
              */
             let timers = loadTimers();
 
-            // ------------------ utility ------------------
+            // ---------- utilities ----------
             function saveTimers() {
-                localStorage.setItem('multiTimers', JSON.stringify(timers));
+                localStorage.setItem('taskTimeTracker', JSON.stringify(timers));
             }
 
             function loadTimers() {
                 try {
-                    const d = JSON.parse(localStorage.getItem('multiTimers'));
+                    const d = JSON.parse(localStorage.getItem('taskTimeTracker'));
                     if (Array.isArray(d)) return d;
                 } catch (_) { }
                 return [];
@@ -165,19 +165,28 @@
                 return (h * 3600 + min * 60 + sec) * 1000;
             }
 
-            // ------------------ rendering ------------------
+            function getElapsed(t) {
+                return t.elapsed + (t.running ? Date.now() - t.lastStart : 0);
+            }
+
+            function totalElapsed() {
+                return timers.reduce((sum, t) => sum + getElapsed(t), 0);
+            }
+
+            // ---------- rendering ----------
             function render() {
+                const total = totalElapsed();
                 timersEl.innerHTML = '';
                 timers.forEach((t) => {
                     const row = document.createElement('div');
                     row.className = 'timer';
                     row.dataset.id = t.id;
 
-                    // main button
+                    // Toggle button
                     const btn = document.createElement('button');
                     btn.className = 'toggle' + (t.running ? ' running' : '');
                     btn.textContent = t.label;
-                    btn.title = 'Left-click: start/stop\nRight-click: rename';
+                    btn.title = 'Left‑click: start / stop\nRight‑click: rename';
                     btn.onclick = () => toggleTimer(t.id);
                     btn.oncontextmenu = (e) => {
                         e.preventDefault();
@@ -185,15 +194,17 @@
                     };
                     row.appendChild(btn);
 
-                    // time display
+                    // Time + percent
                     const span = document.createElement('span');
                     span.className = 'time';
-                    span.textContent = formatMs(t.elapsed + (t.running ? Date.now() - t.lastStart : 0));
+                    const elapsed = getElapsed(t);
+                    const percent = total ? ((elapsed / total) * 100).toFixed(2) : '0.00';
+                    span.textContent = `${formatMs(elapsed)}  (${percent}%)`;
                     span.title = 'Click to edit time';
                     span.onclick = () => editTime(t.id);
                     row.appendChild(span);
 
-                    // delete button
+                    // Delete button
                     const del = document.createElement('button');
                     del.className = 'delete';
                     del.textContent = '✕';
@@ -205,27 +216,24 @@
                 });
             }
 
-            // ------------------ core logic ------------------
+            // ---------- timer logic ----------
             function toggleTimer(id) {
                 const now = Date.now();
                 const target = timers.find((x) => x.id === id);
                 if (!target) return;
 
                 if (target.running) {
-                    // stop target
                     target.elapsed += now - target.lastStart;
                     target.running = false;
                     target.lastStart = null;
                 } else {
-                    // stop all others
                     timers.forEach((t) => {
-                        if (t.running && t.id !== id) {
+                        if (t.running) {
                             t.elapsed += now - t.lastStart;
                             t.running = false;
                             t.lastStart = null;
                         }
                     });
-                    // start target
                     target.running = true;
                     target.lastStart = now;
                 }
@@ -236,7 +244,7 @@
             function editTime(id) {
                 const t = timers.find((x) => x.id === id);
                 if (!t) return;
-                const current = formatMs(t.elapsed + (t.running ? Date.now() - t.lastStart : 0));
+                const current = formatMs(getElapsed(t));
                 const input = prompt('Enter time in hh:mm[:ss] format', current);
                 if (input === null) return;
                 const ms = parseTime(input.trim());
@@ -272,7 +280,7 @@
                 render();
             }
 
-            // ------------------ events ------------------
+            // ---------- event hooks ----------
             addForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 const label = newLabelInput.value.trim();
@@ -300,17 +308,10 @@
                 render();
             };
 
-            // update display every second
-            setInterval(() => {
-                document.querySelectorAll('.timer').forEach((row) => {
-                    const id = row.dataset.id;
-                    const t = timers.find((x) => x.id === id);
-                    if (!t) return;
-                    row.querySelector('span.time').textContent = formatMs(t.elapsed + (t.running ? Date.now() - t.lastStart : 0));
-                });
-            }, 1000);
+            // ---------- ticking ----------
+            setInterval(render, 1000);
 
-            // initial render
+            // initial paint
             render();
         })();
     </script>
