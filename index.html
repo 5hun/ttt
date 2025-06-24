@@ -58,12 +58,17 @@
             color: #2d3436;
         }
 
+        /* fixed‑width numeric display */
         .timer span.time {
             font-variant-numeric: tabular-nums;
-            font-size: 1.1rem;
+            font-family: "Roboto Mono", monospace, sans-serif;
+            white-space: pre;
+            /* keep spaces */
+            min-width: 20ch;
+            /* reserve width so layout doesn't jump */
+            text-align: right;
             cursor: pointer;
             user-select: none;
-            text-align: right;
         }
 
         .timer button.delete {
@@ -129,49 +134,32 @@
             const newLabelInput = document.getElementById('newLabel');
             const resetAllBtn = document.getElementById('resetAll');
 
-            /** Timer objects structure
-             *  { id, label, elapsed, running, lastStart }
-             */
+            /* Timer object: { id, label, elapsed, running, lastStart } */
             let timers = loadTimers();
 
             // ---------- utilities ----------
-            function saveTimers() {
-                localStorage.setItem('taskTimeTracker', JSON.stringify(timers));
-            }
-
+            function saveTimers() { localStorage.setItem('taskTimeTracker', JSON.stringify(timers)); }
             function loadTimers() {
-                try {
-                    const d = JSON.parse(localStorage.getItem('taskTimeTracker'));
-                    if (Array.isArray(d)) return d;
-                } catch (_) { }
+                try { const d = JSON.parse(localStorage.getItem('taskTimeTracker')); if (Array.isArray(d)) return d; } catch (_) { }
                 return [];
             }
 
+            const TWO_DIGITS = (n) => String(n).padStart(2, '0');
             function formatMs(ms) {
-                const total = Math.floor(ms / 1000);
-                const hh = String(Math.floor(total / 3600)).padStart(2, '0');
-                const mm = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
-                const ss = String(total % 60).padStart(2, '0');
-                return `${hh}:${mm}:${ss}`;
+                const s = Math.floor(ms / 1000);
+                return `${TWO_DIGITS(Math.floor(s / 3600))}:${TWO_DIGITS(Math.floor((s % 3600) / 60))}:${TWO_DIGITS(s % 60)}`;
             }
-
             function parseTime(str) {
                 const m = str.match(/^(\d+):(\d{1,2})(?::(\d{1,2}))?$/);
                 if (!m) return null;
-                const h = +m[1];
-                const min = +m[2];
-                const sec = m[3] !== undefined ? +m[3] : 0;
+                const [h, min, sec = 0] = m.slice(1).map(Number);
                 if (min >= 60 || sec >= 60) return null;
                 return (h * 3600 + min * 60 + sec) * 1000;
             }
 
-            function getElapsed(t) {
-                return t.elapsed + (t.running ? Date.now() - t.lastStart : 0);
-            }
-
-            function totalElapsed() {
-                return timers.reduce((sum, t) => sum + getElapsed(t), 0);
-            }
+            const getElapsed = (t) => t.elapsed + (t.running ? Date.now() - t.lastStart : 0);
+            const totalElapsed = () => timers.reduce((sum, t) => sum + getElapsed(t), 0);
+            const padPercent = (p) => p.toFixed(2).padStart(6, ' '); // "  0.00" – "100.00"
 
             // ---------- rendering ----------
             function render() {
@@ -186,20 +174,17 @@
                     const btn = document.createElement('button');
                     btn.className = 'toggle' + (t.running ? ' running' : '');
                     btn.textContent = t.label;
-                    btn.title = 'Left‑click: start / stop\nRight‑click: rename';
+                    btn.title = 'Left‑click: start/stop\nRight‑click: rename';
                     btn.onclick = () => toggleTimer(t.id);
-                    btn.oncontextmenu = (e) => {
-                        e.preventDefault();
-                        renameTimer(t.id);
-                    };
+                    btn.oncontextmenu = (e) => { e.preventDefault(); renameTimer(t.id); };
                     row.appendChild(btn);
 
-                    // Time + percent
+                    // Time + percent (fixed width)
                     const span = document.createElement('span');
                     span.className = 'time';
                     const elapsed = getElapsed(t);
-                    const percent = total ? ((elapsed / total) * 100).toFixed(2) : '0.00';
-                    span.textContent = `${formatMs(elapsed)}  (${percent}%)`;
+                    const percent = total ? padPercent((elapsed / total) * 100) : '  0.00';
+                    span.textContent = `${formatMs(elapsed)} (${percent}%)`;
                     span.title = 'Click to edit time';
                     span.onclick = () => editTime(t.id);
                     row.appendChild(span);
@@ -228,11 +213,7 @@
                     target.lastStart = null;
                 } else {
                     timers.forEach((t) => {
-                        if (t.running) {
-                            t.elapsed += now - t.lastStart;
-                            t.running = false;
-                            t.lastStart = null;
-                        }
+                        if (t.running) { t.elapsed += now - t.lastStart; t.running = false; t.lastStart = null; }
                     });
                     target.running = true;
                     target.lastStart = now;
@@ -248,70 +229,32 @@
                 const input = prompt('Enter time in hh:mm[:ss] format', current);
                 if (input === null) return;
                 const ms = parseTime(input.trim());
-                if (ms === null) {
-                    alert('Invalid format');
-                    return;
-                }
-                t.elapsed = ms;
-                if (t.running) t.lastStart = Date.now();
-                saveTimers();
-                render();
+                if (ms === null) return alert('Invalid format');
+                t.elapsed = ms; if (t.running) t.lastStart = Date.now();
+                saveTimers(); render();
             }
-
             function renameTimer(id) {
                 const t = timers.find((x) => x.id === id);
                 if (!t) return;
-                const input = prompt('Enter new name', t.label);
-                if (input === null) return;
-                const name = input.trim();
-                if (!name) {
-                    alert('Name cannot be empty');
-                    return;
-                }
-                t.label = name;
-                saveTimers();
-                render();
+                const name = prompt('Enter new name', t.label)?.trim();
+                if (!name) return;
+                t.label = name; saveTimers(); render();
             }
+            const deleteTimer = (id) => { if (!confirm('Delete this timer?')) return; timers = timers.filter((t) => t.id !== id); saveTimers(); render(); };
 
-            function deleteTimer(id) {
-                if (!confirm('Delete this timer?')) return;
-                timers = timers.filter((x) => x.id !== id);
-                saveTimers();
-                render();
-            }
-
-            // ---------- event hooks ----------
+            // ---------- events ----------
             addForm.addEventListener('submit', (e) => {
                 e.preventDefault();
                 const label = newLabelInput.value.trim();
                 if (!label) return;
-                timers.push({
-                    id: crypto.randomUUID(),
-                    label,
-                    elapsed: 0,
-                    running: false,
-                    lastStart: null,
-                });
+                timers.push({ id: crypto.randomUUID(), label, elapsed: 0, running: false, lastStart: null });
                 newLabelInput.value = '';
-                saveTimers();
-                render();
+                saveTimers(); render();
             });
+            resetAllBtn.onclick = () => { if (!confirm('Reset all timers?')) return; timers.forEach((t) => { t.elapsed = 0; t.running = false; t.lastStart = null; }); saveTimers(); render(); };
 
-            resetAllBtn.onclick = () => {
-                if (!confirm('Reset all timers?')) return;
-                timers.forEach((t) => {
-                    t.elapsed = 0;
-                    t.running = false;
-                    t.lastStart = null;
-                });
-                saveTimers();
-                render();
-            };
-
-            // ---------- ticking ----------
+            // ---------- tick ----------
             setInterval(render, 1000);
-
-            // initial paint
             render();
         })();
     </script>
